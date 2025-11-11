@@ -1,8 +1,8 @@
 import streamlit as st
 import numpy as np
 import pandas as pd
-import plotly.graph_objects as go
-import plotly.express as px
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 st.set_page_config(page_title="TOPSIS avec Entropie", layout="wide", page_icon="📊")
 
@@ -269,6 +269,23 @@ with tab3:
             'Combiné': '{:.4f}'
         }), use_container_width=True)
         
+        # Graphique des poids
+        fig, ax = plt.subplots(figsize=(12, 5))
+        x = np.arange(len(weights_df))
+        width = 0.25
+        ax.bar(x - width, weights_df['Entropie (Objectif)'], width, label='Entropie', color='skyblue')
+        ax.bar(x, weights_df['Subjectif'], width, label='Subjectif', color='lightcoral')
+        ax.bar(x + width, weights_df['Combiné'], width, label='Combiné', color='lightgreen')
+        ax.set_xlabel('Sous-critères')
+        ax.set_ylabel('Poids')
+        ax.set_title('Comparaison des Poids')
+        ax.set_xticks(x)
+        ax.set_xticklabels(range(1, len(weights_df)+1))
+        ax.legend()
+        ax.grid(axis='y', alpha=0.3)
+        st.pyplot(fig)
+        plt.close()
+        
         # Matrice normalisée
         st.markdown("### 📐 Matrice Normalisée")
         normalized_df = pd.DataFrame(
@@ -286,6 +303,18 @@ with tab3:
             index=st.session_state.decision_matrix.index
         )
         st.dataframe(weighted_df.style.format('{:.4f}'), use_container_width=True)
+        
+        # Heatmap de la matrice pondérée
+        fig, ax = plt.subplots(figsize=(12, 6))
+        sns.heatmap(results['weighted_matrix'], annot=True, fmt='.3f', cmap='YlGnBu', 
+                    xticklabels=range(1, len(weights_df)+1),
+                    yticklabels=st.session_state.decision_matrix.index,
+                    ax=ax)
+        ax.set_title('Matrice Pondérée (Heatmap)')
+        ax.set_xlabel('Sous-critères')
+        ax.set_ylabel('Alternatives')
+        st.pyplot(fig)
+        plt.close()
 
 with tab4:
     st.header("Résultats Finaux")
@@ -305,97 +334,150 @@ with tab4:
             'Rang': topsis['ranking']
         }).sort_values('Rang')
         
+        # Utiliser un dégradé de couleurs pour la proximité
+        def color_proximity(val):
+            color = plt.cm.RdYlGn(val)
+            return f'background-color: rgba({int(color[0]*255)}, {int(color[1]*255)}, {int(color[2]*255)}, 0.5)'
+        
         st.dataframe(ranking_df.style.format({
             'S+ (Distance PIS)': '{:.4f}',
             'S- (Distance NIS)': '{:.4f}',
             'Proximité Relative (Ci)': '{:.4f}'
-        }).background_gradient(subset=['Proximité Relative (Ci)'], cmap='RdYlGn'), use_container_width=True)
+        }).applymap(color_proximity, subset=['Proximité Relative (Ci)']), use_container_width=True)
         
         # Graphiques
         col1, col2 = st.columns(2)
         
         with col1:
             # Graphique à barres des proximités
-            fig1 = go.Figure(data=[
-                go.Bar(
-                    x=st.session_state.decision_matrix.index,
-                    y=topsis['proximity'],
-                    marker_color=topsis['proximity'],
-                    marker_colorscale='RdYlGn',
-                    text=[f"{v:.4f}" for v in topsis['proximity']],
-                    textposition='outside'
-                )
-            ])
-            fig1.update_layout(
-                title="Proximité Relative par Alternative",
-                xaxis_title="Alternative",
-                yaxis_title="Proximité (Ci)",
-                yaxis_range=[0, 1]
-            )
-            st.plotly_chart(fig1, use_container_width=True)
+            fig, ax = plt.subplots(figsize=(8, 5))
+            colors = plt.cm.RdYlGn(topsis['proximity'])
+            bars = ax.bar(st.session_state.decision_matrix.index, topsis['proximity'], color=colors)
+            ax.set_xlabel('Alternative')
+            ax.set_ylabel('Proximité (Ci)')
+            ax.set_title('Proximité Relative par Alternative')
+            ax.set_ylim(0, 1)
+            ax.grid(axis='y', alpha=0.3)
+            
+            # Ajouter les valeurs sur les barres
+            for i, bar in enumerate(bars):
+                height = bar.get_height()
+                ax.text(bar.get_x() + bar.get_width()/2., height,
+                       f'{height:.4f}',
+                       ha='center', va='bottom', fontsize=9)
+            
+            plt.xticks(rotation=45, ha='right')
+            plt.tight_layout()
+            st.pyplot(fig)
+            plt.close()
         
         with col2:
             # Comparaison des distances
-            fig2 = go.Figure()
-            fig2.add_trace(go.Bar(
-                name='S+ (Distance PIS)',
-                x=st.session_state.decision_matrix.index,
-                y=topsis['S_plus'],
-                marker_color='lightcoral'
-            ))
-            fig2.add_trace(go.Bar(
-                name='S- (Distance NIS)',
-                x=st.session_state.decision_matrix.index,
-                y=topsis['S_minus'],
-                marker_color='lightgreen'
-            ))
-            fig2.update_layout(
-                title="Comparaison des Distances",
-                xaxis_title="Alternative",
-                yaxis_title="Distance",
-                barmode='group'
-            )
-            st.plotly_chart(fig2, use_container_width=True)
+            fig, ax = plt.subplots(figsize=(8, 5))
+            x = np.arange(len(st.session_state.decision_matrix.index))
+            width = 0.35
+            
+            ax.bar(x - width/2, topsis['S_plus'], width, label='S+ (Distance PIS)', color='lightcoral')
+            ax.bar(x + width/2, topsis['S_minus'], width, label='S- (Distance NIS)', color='lightgreen')
+            
+            ax.set_xlabel('Alternative')
+            ax.set_ylabel('Distance')
+            ax.set_title('Comparaison des Distances')
+            ax.set_xticks(x)
+            ax.set_xticklabels(st.session_state.decision_matrix.index)
+            ax.legend()
+            ax.grid(axis='y', alpha=0.3)
+            
+            plt.xticks(rotation=45, ha='right')
+            plt.tight_layout()
+            st.pyplot(fig)
+            plt.close()
         
-        # Radar chart pour visualiser les performances
-        st.markdown("### 🎯 Analyse des Performances")
+        # Graphique de classement
+        st.markdown("### 📊 Visualisation du Classement")
+        fig, ax = plt.subplots(figsize=(12, 6))
+        
+        sorted_indices = np.argsort(topsis['proximity'])[::-1]
+        sorted_alts = [st.session_state.decision_matrix.index[i] for i in sorted_indices]
+        sorted_prox = [topsis['proximity'][i] for i in sorted_indices]
+        
+        colors_sorted = plt.cm.RdYlGn(np.array(sorted_prox))
+        bars = ax.barh(sorted_alts, sorted_prox, color=colors_sorted)
+        
+        ax.set_xlabel('Proximité Relative (Ci)', fontsize=12)
+        ax.set_ylabel('Alternative', fontsize=12)
+        ax.set_title('Classement des Alternatives (du meilleur au pire)', fontsize=14, fontweight='bold')
+        ax.set_xlim(0, 1)
+        ax.grid(axis='x', alpha=0.3)
+        
+        # Ajouter les valeurs et les rangs
+        for i, (bar, prox) in enumerate(zip(bars, sorted_prox)):
+            width = bar.get_width()
+            ax.text(width, bar.get_y() + bar.get_height()/2.,
+                   f' {prox:.4f} (Rang {i+1})',
+                   ha='left', va='center', fontsize=10, fontweight='bold')
+        
+        plt.tight_layout()
+        st.pyplot(fig)
+        plt.close()
+        
+        # Radar chart pour comparaison des performances
+        st.markdown("### 🎯 Analyse Comparative des Performances")
         
         selected_alts = st.multiselect(
-            "Sélectionner les alternatives à comparer",
+            "Sélectionner les alternatives à comparer (max 5)",
             options=list(st.session_state.decision_matrix.index),
             default=list(st.session_state.decision_matrix.index)[:min(3, num_alternatives)]
         )
         
-        if selected_alts:
-            fig3 = go.Figure()
+        if selected_alts and len(selected_alts) <= 5:
+            num_criteria = len(st.session_state.decision_matrix.columns)
+            angles = np.linspace(0, 2 * np.pi, num_criteria, endpoint=False).tolist()
+            angles += angles[:1]
             
-            for alt in selected_alts:
-                idx = list(st.session_state.decision_matrix.index).index(alt)
-                values = topsis['weighted_matrix'][idx].tolist()
-                values.append(values[0])  # Fermer le radar
-                
-                criteria_names = list(st.session_state.decision_matrix.columns)
-                criteria_names.append(criteria_names[0])
-                
-                fig3.add_trace(go.Scatterpolar(
-                    r=values,
-                    theta=criteria_names,
-                    fill='toself',
-                    name=alt
-                ))
+            fig, ax = plt.subplots(figsize=(10, 10), subplot_kw=dict(projection='polar'))
             
-            fig3.update_layout(
-                polar=dict(radialaxis=dict(visible=True)),
-                showlegend=True,
-                title="Comparaison des Performances Pondérées"
-            )
-            st.plotly_chart(fig3, use_container_width=True)
+            colors = plt.cm.tab10(np.linspace(0, 1, len(selected_alts)))
+            
+            for idx, alt in enumerate(selected_alts):
+                alt_idx = list(st.session_state.decision_matrix.index).index(alt)
+                values = topsis['weighted_matrix'][alt_idx].tolist()
+                values += values[:1]
+                
+                ax.plot(angles, values, 'o-', linewidth=2, label=alt, color=colors[idx])
+                ax.fill(angles, values, alpha=0.15, color=colors[idx])
+            
+            ax.set_xticks(angles[:-1])
+            ax.set_xticklabels([f'C{i+1}' for i in range(num_criteria)])
+            ax.set_ylim(0, max([topsis['weighted_matrix'].max() * 1.1, 0.1]))
+            ax.set_title('Comparaison des Performances Pondérées', fontsize=14, fontweight='bold', pad=20)
+            ax.legend(loc='upper right', bbox_to_anchor=(1.3, 1.1))
+            ax.grid(True)
+            
+            plt.tight_layout()
+            st.pyplot(fig)
+            plt.close()
+        elif len(selected_alts) > 5:
+            st.warning("⚠️ Veuillez sélectionner au maximum 5 alternatives pour une meilleure lisibilité")
+        
+        # Analyse de sensibilité
+        st.markdown("### 📉 Résumé Statistique")
+        col_a, col_b, col_c, col_d = st.columns(4)
+        
+        with col_a:
+            st.metric("Proximité Moyenne", f"{np.mean(topsis['proximity']):.4f}")
+        with col_b:
+            st.metric("Écart-type", f"{np.std(topsis['proximity']):.4f}")
+        with col_c:
+            st.metric("Min", f"{np.min(topsis['proximity']):.4f}")
+        with col_d:
+            st.metric("Max", f"{np.max(topsis['proximity']):.4f}")
         
         # Téléchargement des résultats
         st.markdown("### 💾 Exporter les Résultats")
         
-        col_a, col_b = st.columns(2)
-        with col_a:
+        col_x, col_y = st.columns(2)
+        with col_x:
             csv = ranking_df.to_csv(index=False)
             st.download_button(
                 label="📥 Télécharger le classement (CSV)",
@@ -404,7 +486,7 @@ with tab4:
                 mime="text/csv"
             )
         
-        with col_b:
+        with col_y:
             weights_csv = pd.DataFrame({
                 'Critère': st.session_state.decision_matrix.columns,
                 'Poids_Entropie': results['w_entropy'],
